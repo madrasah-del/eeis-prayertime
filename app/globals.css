@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --font-display: "Inter", "sans-serif";
+}
+
+:root {
+  /* Default to Dark Mode theme as primary inspiration was dark */
+  --background: #102218;
+  /* Dark Green */
+  --foreground: #ffffff;
+
+  --card: #1a3525;
+  --card-foreground: #ffffff;
+
+  --primary: #13ec6d;
+  /* Neon Green */
+  --primary-foreground: #102218;
+
+  --secondary: #d4af37;
+  /* Gold */
+  --secondary-foreground: #102218;
+
+  --accent: #1a3525;
+  --accent-foreground: #ffffff;
+
+  --sidebar: #0d1b13;
+  --sidebar-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #f6f8f7;
+    --foreground: #102218;
+
+    --card: #ffffff;
+    --card-foreground: #102218;
+
+    /* Keep primary consistent or adjust slightly? Design implies consistency */
+    --primary: #13ec6d;
+    --primary-foreground: #ffffff;
+
+    --secondary: #d4af37;
+    --secondary-foreground: #ffffff;
+
+    --accent: #eef2f0;
+    --accent-foreground: #102218;
+
+    --sidebar: #f0f3f2;
+    --sidebar-foreground: #102218;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Utilities from Design */
+.islamic-pattern {
+  background-color: var(--background);
+  background-image: radial-gradient(#13ec6d 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+}
+
+.text-shadow-glow {
+  text-shadow: 0 0 10px rgba(19, 236, 109, 0.3);
+}
+
+.glass-panel {
+  @apply bg-[#1a3525]/40 backdrop-blur-xl border border-[#13ec6d]/10;
+}
