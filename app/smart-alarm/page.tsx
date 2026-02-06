@@ -3,7 +3,7 @@
 import Link from "next/link";
 import React, { useState, useEffect, useMemo } from "react";
 import prayerScheduleRaw from "../data/prayer_schedule.json";
-import { AUDIO_URLS } from "../hooks/useAdhan";
+import { AUDIO_URLS, useAdhan } from "../hooks/useAdhan";
 
 // Types
 type PrayerTime = { adhan: string; jamat: string };
@@ -56,7 +56,45 @@ export default function SmartAlarmPage() {
     const [bedtimeEnabled, setBedtimeEnabled] = useState(true);
     const [bedtimeOffset, setBedtimeOffset] = useState(60); // mins
     const [bedtimeSound, setBedtimeSound] = useState("Deep Rain Sleep");
-    const [lightControl, setLightControl] = useState(true);
+    // const [lightControl, setLightControl] = useState(true); // Deprecated
+
+    // Persistence Logic
+    const [isLoaded, setIsLoaded] = useState(false);
+
+    useEffect(() => {
+        const saved = localStorage.getItem("smartAlarmSettings");
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                if (parsed.morningEnabled !== undefined) setMorningEnabled(parsed.morningEnabled);
+                if (parsed.morningMode) setMorningMode(parsed.morningMode);
+                if (parsed.morningOffset !== undefined) setMorningOffset(parsed.morningOffset);
+                if (parsed.morningSound) setMorningSound(parsed.morningSound);
+                if (parsed.morningLightAlarm !== undefined) setMorningLightAlarm(parsed.morningLightAlarm);
+                if (parsed.bedtimeEnabled !== undefined) setBedtimeEnabled(parsed.bedtimeEnabled);
+                if (parsed.bedtimeOffset !== undefined) setBedtimeOffset(parsed.bedtimeOffset);
+                if (parsed.bedtimeSound) setBedtimeSound(parsed.bedtimeSound);
+            } catch (e) {
+                console.error("Failed to parse settings", e);
+            }
+        }
+        setIsLoaded(true);
+    }, []);
+
+    useEffect(() => {
+        if (!isLoaded) return;
+        const settings = {
+            morningEnabled,
+            morningMode,
+            morningOffset,
+            morningSound,
+            morningLightAlarm,
+            bedtimeEnabled,
+            bedtimeOffset,
+            bedtimeSound
+        };
+        localStorage.setItem("smartAlarmSettings", JSON.stringify(settings));
+    }, [morningEnabled, morningMode, morningOffset, morningSound, morningLightAlarm, bedtimeEnabled, bedtimeOffset, bedtimeSound, isLoaded]);
 
     // --- Flash Logic ---
     const triggerFlash = async () => {
@@ -107,13 +145,12 @@ export default function SmartAlarmPage() {
         }
     };
 
-    // --- Effects --- (Moved below to access derived morningAlarmTime)
+    // Audio Hook (Must be at top level)
+    const { play, stop, isPlaying } = useAdhan();
+    const hasTriggeredRef = React.useRef<{ morning: boolean; bedtime: boolean }>({ morning: false, bedtime: false });
 
 
-    // --- 3. Derived Logic ---
 
-
-    // Times
     const fajrTime = useMemo(() => parseTime(todayData?.fajr.adhan, currentTime), [todayData, currentTime]);
     const fajrJamatTime = useMemo(() => parseTime(todayData?.fajr.jamat, currentTime), [todayData, currentTime]);
     const shuruqTime = useMemo(() => parseTime(todayData?.shuruq, currentTime), [todayData, currentTime]);
@@ -218,45 +255,62 @@ export default function SmartAlarmPage() {
         sleepDurationStr = `${h}h ${m}m`;
     }
 
-    // --- 3. Derived Logic - Effects ---
-
-    // Monitor for Light Alarm Trigger
+    // --- Effects (Audio & Light) ---
+    // Monitor for Alarm Triggers (Audio + Light + Flash)
     useEffect(() => {
-        if (!morningEnabled || !morningAlarmTime) return;
-
         const checkAlarm = () => {
             const now = new Date();
-            const timeDiff = morningAlarmTime.getTime() - now.getTime(); // ms
-            const minsDiff = timeDiff / 60000;
 
-            // 1. Gradual Brightness (15 mins before)
-            if (morningLightAlarm && minsDiff <= 15 && minsDiff > 0) {
-                // 15 mins -> 0% ... 0 mins -> 100%
-                // Inverse fraction
-                const fraction = (15 - minsDiff) / 15; // 0 to 1
-                // Clamp
-                const b = Math.min(100, Math.max(0, fraction * 100));
-                setScreenBrightness(b);
-            } else if (minsDiff > 15 || minsDiff < -1) {
-                // Reset if not in window
-                setScreenBrightness(0);
+            // --- Morning Alarm Check ---
+            if (morningEnabled && morningAlarmTime) {
+                const timeDiff = morningAlarmTime.getTime() - now.getTime(); // ms
+                const minsDiff = timeDiff / 60000;
+
+                // 1. Gradual Brightness (15 mins before)
+                if (morningLightAlarm && minsDiff <= 15 && minsDiff > 0) {
+                    const fraction = (15 - minsDiff) / 15;
+                    const b = Math.min(100, Math.max(0, fraction * 100));
+                    setScreenBrightness(b);
+                } else if (minsDiff > 15 || minsDiff < -1) {
+                    setScreenBrightness(0);
+                }
+
+                // 2. Trigger Alarm (Audio + Flash)
+                // Trigger window: within 1 second of the target time
+                if (Math.abs(timeDiff) < 1000 && !hasTriggeredRef.current.morning) {
+                    // Play Sound
+                    play(morningSound);
+
+                    // Trigger Flash
+                    if (morningLightAlarm) {
+                        triggerFlash();
+                    }
+
+                    // Mark as triggered to prevent double-firing
+                    hasTriggeredRef.current.morning = true;
+
+                    // Reset trigger flag after 1 minute (so it can trigger tomorrow)
+                    setTimeout(() => { hasTriggeredRef.current.morning = false; }, 60000);
+                }
             }
 
-            // 2. Trigger Flash (At alarm time)
-            if (morningLightAlarm && Math.abs(timeDiff) < 1000) {
-                triggerFlash();
+            // --- Bedtime Alarm Check ---
+            if (bedtimeEnabled && bedtimeAlarmTime) {
+                const timeDiff = bedtimeAlarmTime.getTime() - now.getTime();
+
+                if (Math.abs(timeDiff) < 1000 && !hasTriggeredRef.current.bedtime) {
+                    play(bedtimeSound);
+
+                    hasTriggeredRef.current.bedtime = true;
+                    setTimeout(() => { hasTriggeredRef.current.bedtime = false; }, 60000);
+                }
             }
         };
 
         const timer = setInterval(checkAlarm, 1000); // Check every second
         return () => clearInterval(timer);
-    }, [morningAlarmTime, morningEnabled, morningLightAlarm]);
+    }, [morningAlarmTime, morningEnabled, morningLightAlarm, bedtimeAlarmTime, bedtimeEnabled, morningSound, bedtimeSound, play]);
 
-    // --- Formatting ---
-    const formatTime = (date: Date | null) => {
-        if (!date) return "--:--";
-        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-    };
 
     const formatAMPM = (date: Date | null) => {
         if (!date) return { time: "--:--", ampm: "--" };
